@@ -1,98 +1,264 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  StyleSheet,
+  Dimensions,
+  SafeAreaView,
+  Modal,
+  Pressable,
+  Alert,
+} from 'react-native';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+type User = {
+  name: { first: string; last: string };
+  gender: string;
+  nat: string;
+  dob: { age: number };
+  picture: { large: string };
+  skillTechnical: number;
+  skillSocial: number;
+  recommendation: 'Sí' | 'No' | 'Prestigiosa';
+};
 
-export default function HomeScreen() {
+const NATIONALITIES: Record<string, string> = {
+  AU: 'Australia',
+  BR: 'Brazil',
+  CA: 'Canada',
+  CH: 'Switzerland',
+  DE: 'Germany',
+  DK: 'Denmark',
+  ES: 'Spain',
+  FI: 'Finland',
+  FR: 'France',
+  GB: 'United Kingdom',
+  IE: 'Ireland',
+  IR: 'Iran',
+  NO: 'Norway',
+  NL: 'Netherlands',
+  NZ: 'New Zealand',
+  TR: 'Turkey',
+  US: 'United States',
+  MX: 'Mexico',
+  UA: 'Ukraine',
+  IN: 'India',
+};
+
+const recommendations = ['Sí', 'No', 'Prestigiosa'] as const;
+
+const jobPositions = [
+  'Técnico en Soporte de Sistemas',
+  'Analista de Datos',
+  'Coordinador de Proyectos Sociales',
+  'Trabajador Social Comunitario',
+];
+
+export default function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+
+  const randomScore = () => Number((Math.random() * 9 + 1).toFixed(1)); // 1.0 to 10.0
+  const randomRecommendation = () =>
+    recommendations[Math.floor(Math.random() * recommendations.length)];
+
+  const fetchUser = async () => {
+    try {
+      const response = await fetch('https://randomuser.me/api/');
+      const json = await response.json();
+
+      const newUser = {
+        ...json.results[0],
+        skillTechnical: randomScore(),
+        skillSocial: randomScore(),
+        recommendation: randomRecommendation(),
+      };
+      setUser(newUser);
+    } catch (e) {
+      console.error('Error fetching user', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchUser();
+  }, []);
+
+  const getFullNationality = (code: string) => NATIONALITIES[code] || code;
+
+  const handleJobSelect = (job: string) => {
+    setModalVisible(false);
+    Alert.alert('Asignación de Puesto', `Se asignó el puesto: ${job}`);
+    fetchUser();
+  };
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
-
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.titleContainer}>
+        <Text style={styles.title}>Candidatos al Empleo</Text>
+      </View>
+      <View style={styles.container}>
+        {user && (
+          <>
+            <Image source={{ uri: user.picture.large }} style={styles.image} />
+            <Text style={styles.name}>{`${user.name.first} ${user.name.last}`}</Text>
+            <Text style={styles.info}>Género: {user.gender}</Text>
+            <Text style={styles.info}>Nacionalidad: {getFullNationality(user.nat)}</Text>
+            <Text style={styles.info}>Edad: {user.dob.age}</Text>
+            <Text style={styles.info}>
+              Habilidad Técnica: {user.skillTechnical} / 10
+            </Text>
+            <Text style={styles.info}>Habilidad Social: {user.skillSocial} / 10</Text>
+            <Text style={styles.info}>Recomendación: {user.recommendation}</Text>
+            <View style={styles.buttonsContainer}>
+              <TouchableOpacity style={[styles.button, styles.redButton]} onPress={fetchUser}>
+                <Text style={styles.buttonText}>💀</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.button, styles.greenButton]} onPress={() => setModalVisible(true)}>
+                <Text style={styles.buttonText}>⛏️</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={modalVisible}
+          onRequestClose={() => setModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalView}>
+              <Text style={styles.modalTitle}>Selecciona un puesto</Text>
+              {jobPositions.map((job) => (
+                <Pressable
+                  key={job}
+                  style={styles.modalButton}
+                  onPress={() => handleJobSelect(job)}
+                >
+                  <Text style={styles.modalButtonText}>{job}</Text>
+                </Pressable>
+              ))}
+              <Pressable style={styles.modalCancelButton} onPress={() => setModalVisible(false)}>
+                <Text style={styles.modalCancelButtonText}>Cancelar</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+      </View>
+    </SafeAreaView>
   );
 }
 
+const { width } = Dimensions.get('window');
+
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: 'white',
+  },
   titleContainer: {
-    flexDirection: 'row',
+    paddingTop: 15,
+    paddingBottom: 10,
+    backgroundColor: 'white',
     alignItems: 'center',
-    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ddd',
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#222',
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  container: {
+    flex: 1,
+    backgroundColor: 'white',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  image: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    marginBottom: 15,
+  },
+  name: {
+    fontSize: 22,
+    fontWeight: '600',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  info: {
+    fontSize: 16,
+    marginBottom: 4,
+    textAlign: 'center',
+    color: '#333',
+  },
+  buttonsContainer: {
+    flexDirection: 'row',
+    marginTop: 25,
+    width: '80%',
+    justifyContent: 'space-between',
+  },
+  button: {
+    flex: 1,
+    height: 45,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 12,
+  },
+  redButton: {
+    backgroundColor: '#ff4d4d',
+  },
+  greenButton: {
+    backgroundColor: '#4CAF50',
+  },
+  buttonText: {
+    fontSize: 26,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 30,
+  },
+  modalView: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 25,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 15,
+  },
+  modalButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 25,
+    backgroundColor: '#4CAF50',
+    borderRadius: 12,
+    marginVertical: 8,
+    width: 280,
+  },
+  modalButtonText: {
+    color: 'white',
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  modalCancelButton: {
+    marginTop: 15,
+    paddingVertical: 10,
+    paddingHorizontal: 25,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#888',
+    width: 280,
+  },
+  modalCancelButtonText: {
+    textAlign: 'center',
+    color: '#888',
+    fontSize: 16,
   },
 });
