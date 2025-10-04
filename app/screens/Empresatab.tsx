@@ -45,6 +45,9 @@ export default function EmpresaTab() {
   const [hasMore, setHasMore] = useState(true);
   const [departamentoSeleccionado, setDepartamentoSeleccionado] = useState<string | null>(null);
   const [departamentoUsuarios, setDepartamentoUsuarios] = useState<Postulado[]>([]);
+  const [departamentoPage, setDepartamentoPage] = useState(1);
+  const [departamentoLastDoc, setDepartamentoLastDoc] = useState<any>(null);
+  const [departamentoHasMore, setDepartamentoHasMore] = useState(true);
 
   // Fetch postulados paginated (solo los que no están eliminados ni contratados)
   const fetchPostulados = async (reset = false) => {
@@ -70,15 +73,32 @@ export default function EmpresaTab() {
     setLoading(false);
   };
 
-  // Fetch usuarios por departamento
-  const fetchDepartamentoUsuarios = async (departamento: string) => {
+  // Fetch usuarios por departamento paginados
+  const fetchDepartamentoUsuarios = async (departamento: string, reset = false) => {
     setLoading(true);
-    const q = query(collection(db, 'postulados'), orderBy('creado', 'desc'));
+    let q;
+    if (reset || !departamentoLastDoc) {
+      q = query(collection(db, 'postulados'), orderBy('creado', 'desc'), limit(10));
+    } else {
+      q = query(
+        collection(db, 'postulados'),
+        orderBy('creado', 'desc'),
+        startAfter(departamentoLastDoc),
+        limit(10)
+      );
+    }
     const snap = await getDocs(q);
     const docs = snap.docs
-      .map(d => ({ id: d.id, ...d.data() } as Postulado)) // <-- cast explícito aquí también
+      .map(d => ({ id: d.id, ...d.data() } as Postulado))
       .filter(d => d.Estado === departamento);
-    setDepartamentoUsuarios(docs);
+    if (reset) {
+      setDepartamentoUsuarios(docs);
+      setDepartamentoPage(1);
+    } else {
+      setDepartamentoUsuarios(prev => [...prev, ...docs]);
+    }
+    setDepartamentoLastDoc(snap.docs[snap.docs.length - 1]);
+    setDepartamentoHasMore(docs.length === 10);
     setLoading(false);
   };
 
@@ -90,6 +110,9 @@ export default function EmpresaTab() {
     if (view === 'departamentos') {
       setDepartamentoSeleccionado(null);
       setDepartamentoUsuarios([]);
+      setDepartamentoPage(1);
+      setDepartamentoLastDoc(null);
+      setDepartamentoHasMore(true);
     }
   }, [view]);
 
@@ -153,83 +176,142 @@ export default function EmpresaTab() {
   // Modal de perfil (con X para cerrar)
   const PerfilModal = () => {
     if (!selectedPostulado) return null;
-    // Mostrar botones de acción solo si el estado es "Postulado"
     const puedeAccionar = !selectedPostulado.Estado || selectedPostulado.Estado === 'Postulado';
+    const isMobile = Platform.OS !== 'web';
+
     return (
-      <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.perfilModalContent, Platform.OS === 'web' && styles.perfilModalContentWeb]}>
-            <TouchableOpacity style={styles.closeBtn} onPress={() => setModalVisible(false)}>
-              <Text style={styles.closeBtnText}>✕</Text>
-            </TouchableOpacity>
-            <View style={styles.fotoPerfil}>
-              <View style={styles.fotoPlaceholder}>
-                <Text style={styles.fotoText}>Foto</Text>
+      <>
+        <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={[
+              styles.perfilModalContent,
+              Platform.OS === 'web' && styles.perfilModalContentWeb
+            ]}>
+              <TouchableOpacity style={styles.closeBtn} onPress={() => setModalVisible(false)}>
+                <Text style={styles.closeBtnText}>✕</Text>
+              </TouchableOpacity>
+              <View style={styles.fotoPerfil}>
+                <View style={styles.fotoPlaceholder}>
+                  <Text style={styles.fotoText}>Foto</Text>
+                </View>
               </View>
-            </View>
-            <View style={styles.infoPerfil}>
-              <Text style={styles.perfilNombre}>
-                {selectedPostulado.apellidoPaterno} {selectedPostulado.apellidoMaterno} {selectedPostulado.nombres}
-              </Text>
-              <Text style={styles.perfilDato}>Edad: {calcularEdad(selectedPostulado.fechaNacimiento)}</Text>
-              <Text style={styles.perfilDato}>Experiencia: {selectedPostulado.experiencia}</Text>
-              <Text style={styles.perfilDato}>Estudios: {selectedPostulado.estudios}</Text>
-              <Text style={styles.perfilDato}>Idiomas: {selectedPostulado.idiomas}</Text>
-              <Text style={styles.perfilDato}>Notas: {selectedPostulado.notas}</Text>
-              <Text style={styles.perfilDato}>Teléfono: {selectedPostulado.telefono || 'No disponible'}</Text>
-              <Text style={styles.perfilDato}>Estado: {selectedPostulado.Estado || 'Postulado'}</Text>
-              {puedeAccionar && (
-                <View style={styles.perfilBotones}>
-                  <TouchableOpacity
-                    style={[styles.perfilBtn, styles.perfilBtnRojo]}
-                    onPress={handleEliminar}
-                  >
-                    <Text style={styles.perfilBtnText}>Eliminar</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.perfilBtn, styles.perfilBtnVerde]}
-                    onPress={() => setDepartamentoModal(true)}
-                  >
-                    <Text style={styles.perfilBtnText}>Contratar</Text>
-                  </TouchableOpacity>
+              {/* Mostrar la información debajo de la foto en móvil */}
+              {isMobile && (
+                <View style={styles.infoPerfilMobile}>
+                  <Text style={styles.perfilNombre}>
+                    {selectedPostulado.apellidoPaterno} {selectedPostulado.apellidoMaterno} {selectedPostulado.nombres}
+                  </Text>
+                  <Text style={styles.perfilDato}>Edad: {calcularEdad(selectedPostulado.fechaNacimiento)}</Text>
+                  {selectedPostulado.experiencia ? (
+                    <Text style={styles.perfilDato}>Experiencia: {selectedPostulado.experiencia}</Text>
+                  ) : null}
+                  {selectedPostulado.estudios ? (
+                    <Text style={styles.perfilDato}>Estudios: {selectedPostulado.estudios}</Text>
+                  ) : null}
+                  {selectedPostulado.idiomas ? (
+                    <Text style={styles.perfilDato}>Idiomas: {selectedPostulado.idiomas}</Text>
+                  ) : null}
+                  {selectedPostulado.notas ? (
+                    <Text style={styles.perfilDato}>Notas: {selectedPostulado.notas}</Text>
+                  ) : null}
+                  {selectedPostulado.telefono ? (
+                    <Text style={styles.perfilDato}>Teléfono: {selectedPostulado.telefono}</Text>
+                  ) : null}
+                  {/* Botones abajo de la información */}
+                  {puedeAccionar && (
+                    <View style={styles.perfilBotonesMobile}>
+                      <TouchableOpacity
+                        style={[styles.perfilBtn, styles.perfilBtnRojo]}
+                        onPress={handleEliminar}
+                      >
+                        <Text style={styles.perfilBtnText}>Descartar</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.perfilBtn, styles.perfilBtnVerde]}
+                        onPress={() => setDepartamentoModal(true)}
+                      >
+                        <Text style={styles.perfilBtnText}>Contratar</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              )}
+              {/* En web, la info va a la derecha */}
+              {!isMobile && (
+                <View style={styles.infoPerfil}>
+                  <Text style={styles.perfilNombre}>
+                    {selectedPostulado.apellidoPaterno} {selectedPostulado.apellidoMaterno} {selectedPostulado.nombres}
+                  </Text>
+                  <Text style={styles.perfilDato}>Edad: {calcularEdad(selectedPostulado.fechaNacimiento)}</Text>
+                  {selectedPostulado.experiencia ? (
+                    <Text style={styles.perfilDato}>Experiencia: {selectedPostulado.experiencia}</Text>
+                  ) : null}
+                  {selectedPostulado.estudios ? (
+                    <Text style={styles.perfilDato}>Estudios: {selectedPostulado.estudios}</Text>
+                  ) : null}
+                  {selectedPostulado.idiomas ? (
+                    <Text style={styles.perfilDato}>Idiomas: {selectedPostulado.idiomas}</Text>
+                  ) : null}
+                  {selectedPostulado.notas ? (
+                    <Text style={styles.perfilDato}>Notas: {selectedPostulado.notas}</Text>
+                  ) : null}
+                  {selectedPostulado.telefono ? (
+                    <Text style={styles.perfilDato}>Teléfono: {selectedPostulado.telefono}</Text>
+                  ) : null}
+                  {puedeAccionar && (
+                    <View style={styles.perfilBotones}>
+                      <TouchableOpacity
+                        style={[styles.perfilBtn, styles.perfilBtnRojo]}
+                        onPress={handleEliminar}
+                      >
+                        <Text style={styles.perfilBtnText}>Descartar</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.perfilBtn, styles.perfilBtnVerde]}
+                        onPress={() => setDepartamentoModal(true)}
+                      >
+                        <Text style={styles.perfilBtnText}>Contratar</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
               )}
             </View>
           </View>
-          {/* Modal para elegir departamento */}
-          <Modal
-            visible={departamentoModal}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setDepartamentoModal(false)}
-          >
-            <View style={styles.modalOverlay}>
-              <View style={styles.departamentoModalContent}>
-                <TouchableOpacity style={styles.closeBtn} onPress={() => setDepartamentoModal(false)}>
-                  <Text style={styles.closeBtnText}>✕</Text>
+        </Modal>
+        {/* Modal para elegir departamento: debe estar fuera del modal del perfil */}
+        <Modal
+          visible={departamentoModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setDepartamentoModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.departamentoModalContent}>
+              <TouchableOpacity style={styles.closeBtn} onPress={() => setDepartamentoModal(false)}>
+                <Text style={styles.closeBtnText}>✕</Text>
+              </TouchableOpacity>
+              <Text style={styles.modalText}>Selecciona departamento</Text>
+              {DEPARTAMENTOS.map(dep => (
+                <TouchableOpacity
+                  key={dep}
+                  style={styles.departamentoBtn}
+                  onPress={() => handleContratar(dep)}
+                >
+                  <Text style={styles.departamentoBtnText}>{dep}</Text>
                 </TouchableOpacity>
-                <Text style={styles.modalText}>Selecciona departamento</Text>
-                {DEPARTAMENTOS.map(dep => (
-                  <TouchableOpacity
-                    key={dep}
-                    style={styles.departamentoBtn}
-                    onPress={() => handleContratar(dep)}
-                  >
-                    <Text style={styles.departamentoBtnText}>{dep}</Text>
-                  </TouchableOpacity>
-                ))}
-                <Button title="Cancelar" onPress={() => setDepartamentoModal(false)} />
-              </View>
+              ))}
+              <Button title="Cancelar" onPress={() => setDepartamentoModal(false)} />
             </View>
-          </Modal>
-        </View>
-      </Modal>
+          </View>
+        </Modal>
+      </>
     );
   };
 
-  // Vista departamentos
+  // Vista departamentos con paginación y barra inferior
   const DepartamentosView = () => (
-    <View style={{ alignItems: 'center', marginTop: 30, width: '100%' }}>
+    <View style={{ alignItems: 'center', marginTop: 30, width: '100%', flex: 1 }}>
       <Text style={{ fontSize: 18, marginBottom: 16 }}>Departamentos</Text>
       <View style={{ flexDirection: 'row', gap: 12, marginBottom: 18 }}>
         {DEPARTAMENTOS.map(dep => (
@@ -238,7 +320,9 @@ export default function EmpresaTab() {
             style={styles.departamentoBtn}
             onPress={async () => {
               setDepartamentoSeleccionado(dep);
-              await fetchDepartamentoUsuarios(dep);
+              setDepartamentoLastDoc(null);
+              setDepartamentoPage(1);
+              await fetchDepartamentoUsuarios(dep, true);
             }}
           >
             <Text style={styles.departamentoBtnText}>{dep}</Text>
@@ -246,7 +330,7 @@ export default function EmpresaTab() {
         ))}
       </View>
       {departamentoSeleccionado && (
-        <>
+        <View style={{ flex: 1, width: '100%' }}>
           <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 8 }}>
             {departamentoSeleccionado}
           </Text>
@@ -257,31 +341,117 @@ export default function EmpresaTab() {
             ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 20 }}>No hay empleados en este departamento.</Text>}
             style={{ width: '100%' }}
           />
-          <PerfilModal />
-        </>
+        </View>
+      )}
+      {/* Barra de navegación inferior en móvil: SIEMPRE visible en departamentos */}
+      {isMobile && (
+        <View style={styles.paginationMobileContainerDepto}>
+          {/* Postulados */}
+          <TouchableOpacity
+            style={styles.fabDepto}
+            onPress={() => setView('postulados')}
+          >
+            <Text style={styles.fabDeptoText}>Postulados</Text>
+          </TouchableOpacity>
+          {/* Anterior */}
+          <Button
+            title="Anterior"
+            disabled={!departamentoSeleccionado || departamentoPage === 1}
+            onPress={async () => {
+              if (!departamentoSeleccionado) return;
+              setDepartamentoLastDoc(null);
+              setDepartamentoPage(p => Math.max(1, p - 1));
+              await fetchDepartamentoUsuarios(departamentoSeleccionado, true);
+            }}
+          />
+          {/* Siguiente */}
+          <Button
+            title="Siguiente"
+            disabled={!departamentoSeleccionado || !departamentoHasMore}
+            onPress={async () => {
+              if (!departamentoSeleccionado) return;
+              setDepartamentoPage(p => p + 1);
+              await fetchDepartamentoUsuarios(departamentoSeleccionado);
+            }}
+          />
+          {/* Login */}
+          <TouchableOpacity style={styles.loginBtn} onPress={goToLogin}>
+            <Text style={styles.loginBtnText}>←</Text>
+          </TouchableOpacity>
+        </View>
       )}
     </View>
   );
 
+  // Función para regresar al login (simulación)
+  const goToLogin = () => {
+    window.location.reload();
+  };
+
+  // Botones flotantes para móvil (login y departamentos/postulados)
+  const isMobile = Platform.OS !== 'web';
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <Text style={styles.adminTitle}>Administración</Text>
-      {Platform.OS === 'web' && (
-        <View style={styles.switchBtns}>
+      {/* Botones flotantes en móvil para postulados */}
+      {isMobile && view === 'postulados' && (
+        <View style={styles.paginationMobileContainer}>
+          {/* Departamentos */}
           <TouchableOpacity
-            style={[styles.switchBtn, view === 'postulados' && styles.switchBtnActive]}
-            onPress={() => setView('postulados')}
-          >
-            <Text style={styles.switchBtnText}>Postulados</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.switchBtn, view === 'departamentos' && styles.switchBtnActive]}
+            style={styles.fabDepto}
             onPress={() => setView('departamentos')}
           >
-            <Text style={styles.switchBtnText}>Departamentos</Text>
+            <Text style={styles.fabDeptoText}>Departamentos</Text>
+          </TouchableOpacity>
+          {/* Anterior */}
+          <Button
+            title="Anterior"
+            disabled={page === 1}
+            onPress={async () => {
+              setPage(p => Math.max(1, p - 1));
+              setLastDoc(null);
+              await fetchPostulados(true);
+            }}
+          />
+          {/* Siguiente */}
+          <Button
+            title="Siguiente"
+            disabled={!hasMore}
+            onPress={async () => {
+              setPage(p => p + 1);
+              await fetchPostulados();
+            }}
+          />
+          {/* Login */}
+          <TouchableOpacity style={styles.loginBtn} onPress={goToLogin}>
+            <Text style={styles.loginBtnText}>←</Text>
           </TouchableOpacity>
         </View>
       )}
+      {/* Botones de navegación en web */}
+      {!isMobile && (
+        <>
+          <TouchableOpacity style={styles.loginBtn} onPress={goToLogin}>
+            <Text style={styles.loginBtnText}>←</Text>
+          </TouchableOpacity>
+          <Text style={styles.adminTitle}>Administración</Text>
+          <View style={styles.switchBtns}>
+            <TouchableOpacity
+              style={[styles.switchBtn, view === 'postulados' && styles.switchBtnActive]}
+              onPress={() => setView('postulados')}
+            >
+              <Text style={styles.switchBtnText}>Postulados</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.switchBtn, view === 'departamentos' && styles.switchBtnActive]}
+              onPress={() => setView('departamentos')}
+            >
+              <Text style={styles.switchBtnText}>Departamentos</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+      {isMobile && <Text style={styles.adminTitle}>Administración</Text>}
       <View style={styles.container}>
         {view === 'postulados' ? (
           <>
@@ -292,25 +462,28 @@ export default function EmpresaTab() {
               ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 40 }}>No hay postulados.</Text>}
               style={{ width: '100%' }}
             />
-            <View style={styles.pagination}>
-              <Button
-                title="Anterior"
-                disabled={page === 1}
-                onPress={async () => {
-                  setPage(p => Math.max(1, p - 1));
-                  setLastDoc(null);
-                  await fetchPostulados(true);
-                }}
-              />
-              <Button
-                title="Siguiente"
-                disabled={!hasMore}
-                onPress={async () => {
-                  setPage(p => p + 1);
-                  await fetchPostulados();
-                }}
-              />
-            </View>
+            {/* En móvil, los botones de paginación y fab están juntos arriba */}
+            {!isMobile && (
+              <View style={styles.pagination}>
+                <Button
+                  title="Anterior"
+                  disabled={page === 1}
+                  onPress={async () => {
+                    setPage(p => Math.max(1, p - 1));
+                    setLastDoc(null);
+                    await fetchPostulados(true);
+                  }}
+                />
+                <Button
+                  title="Siguiente"
+                  disabled={!hasMore}
+                  onPress={async () => {
+                    setPage(p => p + 1);
+                    await fetchPostulados();
+                  }}
+                />
+              </View>
+            )}
             <PerfilModal />
           </>
         ) : (
@@ -429,6 +602,12 @@ const styles = StyleSheet.create({
     alignItems: Platform.OS === 'web' ? 'flex-start' : 'center',
     justifyContent: 'center',
   },
+  infoPerfilMobile: {
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 18,
+    marginBottom: 8,
+  },
   perfilNombre: {
     fontSize: 22,
     fontWeight: '700',
@@ -443,6 +622,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginTop: 18,
     gap: 12,
+  },
+  perfilBotonesMobile: {
+    flexDirection: 'row',
+    marginTop: 18,
+    gap: 12,
+    justifyContent: 'center',
+    width: '100%',
   },
   perfilBtn: {
     paddingVertical: 10,
@@ -500,6 +686,77 @@ const styles = StyleSheet.create({
     fontSize: 22,
     color: '#888',
     fontWeight: 'bold',
+  },
+  fabContainer: {
+    position: 'absolute',
+    flexDirection: 'row',
+    bottom: 18,
+    right: 18,
+    zIndex: 30,
+    alignItems: 'center',
+  },
+  paginationMobileContainer: {
+    position: 'absolute',
+    flexDirection: 'row',
+    alignItems: 'center',
+    bottom: 18,
+    left: 18,
+    right: 18,
+    zIndex: 30,
+    justifyContent: 'flex-start',
+    gap: 8,
+  },
+  paginationMobileContainerDepto: {
+    position: 'absolute',
+    left: 18,
+    right: 18,
+    bottom: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 8,
+    zIndex: 30,
+    backgroundColor: 'transparent',
+  },
+  fabDepto: {
+    backgroundColor: '#FFD600',
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    elevation: 3,
+    opacity: 0.95,
+    minWidth: 28,
+    minHeight: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fabDeptoActive: {
+    backgroundColor: '#FFB300',
+  },
+  fabDeptoText: {
+    color: '#333',
+    fontWeight: 'bold',
+    fontSize: 16,
+    lineHeight: 20,
+  },
+  loginBtn: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 14,
+    elevation: 3,
+    opacity: 0.92,
+    minWidth: 28,
+    minHeight: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  loginBtnText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 18,
+    lineHeight: 20,
   },
 });
 

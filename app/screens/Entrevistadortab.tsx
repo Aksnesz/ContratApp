@@ -73,8 +73,18 @@ export default function EntrevistadorTab() {
     }
   };
 
+  // Función para regresar al login (simulación)
+  const goToLogin = () => {
+    // Si tienes un método más adecuado, reemplaza esto
+    window.location.reload();
+  };
+
   return (
     <View style={styles.outerContainer}>
+      {/* Botón flotante para regresar al login, esquina inferior derecha, solo flecha y más pequeño */}
+      <TouchableOpacity style={styles.loginBtn} onPress={goToLogin}>
+        <Text style={styles.loginBtnText}>←</Text>
+      </TouchableOpacity>
       <Modal
         visible={modalVisible}
         transparent
@@ -272,5 +282,27 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 18,
     textAlign: 'center',
+  },
+  loginBtn: {
+    position: 'absolute',
+    bottom: 18,
+    right: 18,
+    zIndex: 20,
+    backgroundColor: '#4CAF50',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 14,
+    elevation: 3,
+    opacity: 0.92,
+    minWidth: 28,
+    minHeight: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loginBtnText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 18,
+    lineHeight: 20,
   },
 });
